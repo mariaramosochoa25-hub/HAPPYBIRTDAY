@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import styled from 'styled-components';
-import { keyframes } from 'styled-components';
-import { motion } from 'framer-motion';
+import styled, { keyframes } from 'styled-components';
+import { motion, useDragControls, AnimatePresence } from 'framer-motion';
 import MessageCard from './components/MessageCard';
 import FloatingHearts from './components/FloatingHearts';
 import './App.css';
@@ -49,16 +48,23 @@ const StarContainer = styled.div`
 
 const Star = styled.div`
   position: absolute;
-  width: ${props => props.size}px;
-  height: ${props => props.size}px;
+  width: ${props => props.$size}px;
+  height: ${props => props.$size}px;
   background: #fff;
   border-radius: 50%;
-  opacity: ${props => props.opacity};
-  animation: twinkle ${props => props.duration}s ease-in-out infinite;
+  opacity: ${props => props.$opacity};
+  box-shadow: ${props => props.$brilliant
+    ? '0 0 7px 2px rgba(255,255,255,0.9), 0 0 20px rgba(255,190,230,0.8)'
+    : '0 0 3px rgba(255,255,255,0.65)'};
+  animation: twinkle ${props => props.$duration}s ease-in-out infinite;
 
   @keyframes twinkle {
-    0%, 100% { opacity: ${props => props.opacity}; transform: scale(1); }
-    50% { opacity: ${props => props.opacity * 0.5}; transform: scale(0.8); }
+    0%, 100% { opacity: ${props => props.$opacity}; transform: scale(1); filter: brightness(1); }
+    50% {
+      opacity: ${props => props.$brilliant ? 1 : props.$opacity * 0.55};
+      transform: scale(${props => props.$brilliant ? 1.7 : 1.15});
+      filter: brightness(${props => props.$brilliant ? 2 : 1.25});
+    }
   }
 `;
 
@@ -71,29 +77,8 @@ const DecorationCircle = styled(motion.div)`
   pointer-events: none;
 `;
 
-const Title = styled(motion.h1)`
-  position: absolute;
-  top: clamp(18px, 4vh, 38px);
-  left: 0;
-  z-index: 10;
-  width: 100%;
-  margin: 0;
-  padding: 0 70px;
-  color: #ff69b4;
-  font-family: 'Pacifico', cursive;
-  font-size: clamp(1.7rem, 5vw, 3rem);
-  text-align: center;
-  text-shadow: 0 0 10px rgba(255, 105, 180, 0.7), 0 0 20px rgba(255, 105, 180, 0.5);
-
-  @media (max-width: 480px) {
-    top: 72px;
-    padding: 0 12px;
-    font-size: 1.65rem;
-  }
-`;
-
 const AudioButton = styled.button`
-    if (!stage || !gift || floatingNeccos.length > 0) return;
+  position: ${props => props.$intro ? 'absolute' : 'fixed'};
   top: ${props => props.$intro ? '50%' : '18px'};
   left: ${props => props.$intro ? '50%' : 'auto'};
   right: ${props => props.$intro ? 'auto' : '18px'};
@@ -357,6 +342,9 @@ const FallingNeco = styled(motion.div)`
   left: 0;
   pointer-events: auto;
   touch-action: none;
+  cursor: grab;
+
+  &:active { cursor: grabbing; }
 
 `;
 
@@ -373,6 +361,81 @@ const FloatingNecoBody = styled.div`
     filter: sepia(0.72) saturate(0.9) hue-rotate(-8deg);
   }
 `;
+
+const TossableNeco = ({ neco, stageRef }) => {
+  const dragControls = useDragControls();
+  const longPressTimerRef = useRef(null);
+  const activeTouchRef = useRef(null);
+
+  useEffect(() => () => clearTimeout(longPressTimerRef.current), []);
+
+  const startThrowGesture = event => {
+    if (event.pointerType === 'mouse' && (event.button === 2 || event.shiftKey)) {
+      event.preventDefault();
+      dragControls.start(event);
+      return;
+    }
+
+    if (event.pointerType === 'touch') {
+      activeTouchRef.current = event.pointerId;
+      const pointerEvent = event.nativeEvent;
+      longPressTimerRef.current = setTimeout(() => {
+        if (activeTouchRef.current === event.pointerId) dragControls.start(pointerEvent);
+      }, 500);
+    }
+  };
+
+  const cancelLongPress = event => {
+    if (event.pointerType === 'touch' && event.type === 'pointermove') {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+    if (event.type === 'pointerup' || event.type === 'pointercancel') {
+      activeTouchRef.current = null;
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  return (
+    <FallingNeco
+      aria-label="Neco Arc: arrastra para girar; mantén pulsado o usa clic derecho para lanzarlo"
+      title="Arrastra para girar; mantén pulsado en touch o usa clic derecho para lanzarlo"
+      initial={{ x: neco.startX, y: neco.startY, scale: 0.28, rotate: neco.startRotation, opacity: 0 }}
+      animate={{ x: neco.endX, y: neco.endY, scale: 1, rotate: neco.endRotation, opacity: 1 }}
+      transition={{ duration: neco.duration, delay: neco.delay, ease: [0.2, 0.65, 0.35, 1] }}
+      exit={{ x: neco.startX, y: neco.startY, scale: 0.28, opacity: 0, transition: { duration: 0.7, delay: 0, ease: [0.5, 0, 0.75, 0.4] } }}
+      drag
+      dragListener={false}
+      dragControls={dragControls}
+      dragConstraints={stageRef}
+      dragElastic={0.72}
+      dragMomentum
+      dragTransition={{ bounceStiffness: 280, bounceDamping: 20, timeConstant: 420 }}
+      whileDrag={{ scale: 1.08, zIndex: 50 }}
+      onPointerDownCapture={startThrowGesture}
+      onPointerMoveCapture={cancelLongPress}
+      onPointerUpCapture={cancelLongPress}
+      onPointerCancelCapture={cancelLongPress}
+      onContextMenu={event => event.preventDefault()}
+      style={{ width: neco.size, height: neco.size * 1.12 }}
+    >
+      <FloatingNecoBody $duration={neco.floatDuration} $delay={neco.floatDelay}>
+        <model-viewer
+          src="/neco_arc_remake.glb"
+          alt="Neco Arc flotando; arrastra para girar y ver su rostro"
+          camera-controls
+          disable-pan
+          camera-orbit="0deg 80deg 4m"
+          field-of-view="35deg"
+          shadow-intensity="1"
+          environment-image="neutral"
+          exposure="1"
+        ></model-viewer>
+      </FloatingNecoBody>
+    </FallingNeco>
+  );
+};
 
 const BirthdayEnding = styled(motion.div)`
   position: fixed;
@@ -438,6 +501,14 @@ function App() {
   const mikuViewerRef = useRef(null);
   const [mikuScale, setMikuScale] = useState(1.3);
   const [hasStarted, setHasStarted] = useState(false);
+  const [danceStarted, setDanceStarted] = useState(false);
+  const [heartsBoosted, setHeartsBoosted] = useState(false);
+
+  useEffect(() => {
+    if (!danceStarted) return undefined;
+    const timer = setTimeout(() => setHeartsBoosted(true), 2000);
+    return () => clearTimeout(timer);
+  }, [danceStarted]);
     const [floatingNeccos, setFloatingNeccos] = useState([]);
   const [giftOpen, setGiftOpen] = useState(false);
   const [showBirthdayEnding, setShowBirthdayEnding] = useState(false);
@@ -492,12 +563,17 @@ function App() {
       cancelAnimationFrame(retryFrame);
       viewer.removeEventListener('load', handleMikuLoad);
     };
-  }, [hasStarted]);
+  }, [hasStarted, floatingNeccos.length]);
 
   const openGift = () => {
     const stage = stageRef.current?.getBoundingClientRect();
     const gift = giftRef.current?.getBoundingClientRect();
-    if (!stage || !gift || floatingNeccos.length > 0) return;
+    if (floatingNeccos.length > 0) {
+      setFloatingNeccos([]);
+      setGiftOpen(false);
+      return;
+    }
+    if (!stage || !gift) return;
 
     const necoSize = Math.min(196, Math.max(142, stage.width * 0.18));
     const startX = gift.left - stage.left + gift.width / 2 - necoSize / 2;
@@ -505,7 +581,7 @@ function App() {
     const necoHeight = necoSize * 1.12;
     const topBand = stage.height * 0.07;
     const sideBand = stage.width * 0.05;
-    const nextNeccos = Array.from({ length: 8 }, (_, id) => {
+    const nextNeccos = Array.from({ length: 2 }, (_, id) => {
       const zone = id % 4;
       let endX;
       let endY;
@@ -537,8 +613,8 @@ function App() {
         startY: startY + (Math.random() - 0.5) * 20,
         endX,
         endY,
-        startRotation: Math.random() * 30 - 15,
-        endRotation: Math.random() * 18 - 9,
+        startRotation: 0,
+        endRotation: 0,
         duration: 1.8 + Math.random() * 0.65,
         delay: id * 0.12,
         floatDuration: 2.2 + Math.random() * 1.4,
@@ -573,7 +649,7 @@ function App() {
     memeTimeoutRef.current = setTimeout(() => {
       setMemeFlash(null);
       memeLockRef.current = false;
-    }, 500);
+    }, 1300);
   };
 
   const analyzeAudio = () => {
@@ -679,19 +755,21 @@ function App() {
     audioContextRef.current?.close();
   }, []);
 
-  const stars = useMemo(() => Array.from({ length: 50 }, (_, index) => {
-    const size = Math.random() * 3 + 1;
-    const opacity = Math.random() * 0.5 + 0.3;
+  const stars = useMemo(() => Array.from({ length: 96 }, (_, index) => {
+    const brilliant = Math.random() < 0.16;
+    const size = brilliant ? Math.random() * 2 + 2.2 : Math.random() * 1.8 + 1;
+    const opacity = brilliant ? Math.random() * 0.12 + 0.88 : Math.random() * 0.38 + 0.48;
     const top = Math.random() * 100;
     const left = Math.random() * 100;
-    const duration = Math.random() * 3 + 2;
+    const duration = brilliant ? Math.random() * 1.4 + 1.2 : Math.random() * 3 + 2;
 
     return (
       <Star
         key={index}
-        size={size}
-        opacity={opacity}
-        duration={duration}
+        $size={size}
+        $opacity={opacity}
+        $duration={duration}
+        $brilliant={brilliant}
         style={{ top: `${top}%`, left: `${left}%` }}
       />
     );
@@ -703,6 +781,16 @@ function App() {
         ref={audioRef}
         src={encodeURI('/ループザルーム feat. 初音ミク Looping the Rooms ft. Hatsune Miku.mp3')}
         preload="metadata"
+        onTimeUpdate={event => {
+          if (event.currentTarget.currentTime >= 3 && !danceStarted) {
+            setDanceStarted(true);
+            const viewer = mikuViewerRef.current;
+            if (viewer?.availableAnimations?.includes('Miku|Miku_Dance') && typeof viewer.play === 'function') {
+              viewer.animationName = 'Miku|Miku_Dance';
+              viewer.play();
+            }
+          }
+        }}
         onEnded={() => {
           setIsPlaying(false);
           setAudioIntensity(0);
@@ -754,7 +842,7 @@ function App() {
         />
       ))}
 
-      <FloatingHearts count={20} intensity={audioIntensity} />
+      <FloatingHearts count={36} intensity={audioIntensity} boosted={heartsBoosted} />
 
       {memeFlash && (
         <MemeFlash
@@ -765,17 +853,9 @@ function App() {
           style={{ left: memeFlash.x, top: memeFlash.y, width: memeFlash.width }}
           initial={{ opacity: 0, scale: 0.78, rotate: -5 }}
           animate={{ opacity: [0, 1, 1, 0], scale: [0.78, 1, 1, 0.92], rotate: [-5, 0, 0, 4] }}
-          transition={{ duration: 0.5, times: [0, 0.12, 0.78, 1], ease: 'easeOut' }}
+          transition={{ duration: 1.3, times: [0, 0.12, 0.78, 1], ease: 'easeOut' }}
         />
       )}
-
-      <Title
-        initial={{ opacity: 0, y: -30 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8 }}
-      >
-        ¡Feliz cumpleaños!
-      </Title>
 
       {hasStarted && (
         <>
@@ -792,8 +872,8 @@ function App() {
                 ref={mikuViewerRef}
                 src="/miku_birthday.glb"
                 alt="Hatsune Miku bailando"
-                autoplay
-                animation-name="Miku|Miku_Dance"
+                autoplay={danceStarted}
+                animation-name={danceStarted ? 'Miku|Miku_Dance' : ''}
                 shadow-intensity="1"
                 environment-image="neutral"
                 exposure="1"
@@ -822,41 +902,22 @@ function App() {
         ref={giftRef}
         type="button"
         onClick={openGift}
-        disabled={floatingNeccos.length > 0}
-        aria-label={floatingNeccos.length > 0 ? 'Los Neco Arc ya están flotando' : 'Abrir caja de regalo'}
+        aria-label={floatingNeccos.length > 0 ? 'Guardar los Neco Arc en la caja' : 'Abrir caja de regalo'}
       >
         <GiftDrawing $open={giftOpen} aria-hidden="true">
           <span className="gift-box" />
           <span className="gift-lid" />
           <span className="gift-bow" />
         </GiftDrawing>
-        <span>{floatingNeccos.length > 0 ? '¡Sorpresa!' : 'Abrir regalo'}</span>
+        <span>{floatingNeccos.length > 0 ? 'Guardar' : 'Abrir regalo'}</span>
       </GiftButton>
 
       <FallingLayer aria-label="Neco Arc flotando dispersos por la pantalla">
-        {floatingNeccos.map(neco => (
-          <FallingNeco
-            key={neco.id}
-            initial={{ x: neco.startX, y: neco.startY, scale: 0.28, rotate: neco.startRotation, opacity: 0 }}
-            animate={{ x: neco.endX, y: neco.endY, scale: 1, rotate: neco.endRotation, opacity: 1 }}
-            transition={{ duration: neco.duration, delay: neco.delay, ease: [0.2, 0.65, 0.35, 1] }}
-            style={{ width: neco.size, height: neco.size * 1.12 }}
-          >
-            <FloatingNecoBody $duration={neco.floatDuration} $delay={neco.floatDelay}>
-              <model-viewer
-                src="/neco_arc_remake.glb"
-                alt="Neco Arc flotando; arrastra para girar y ver su rostro"
-                camera-controls
-                disable-pan
-                camera-orbit="0deg 10deg 4m"
-                field-of-view="35deg"
-                shadow-intensity="1"
-                environment-image="neutral"
-                exposure="1"
-              ></model-viewer>
-            </FloatingNecoBody>
-          </FallingNeco>
-        ))}
+        <AnimatePresence>
+          {floatingNeccos.map(neco => (
+            <TossableNeco key={neco.id} neco={neco} stageRef={stageRef} />
+          ))}
+        </AnimatePresence>
       </FallingLayer>
 
       <SceneFloor />

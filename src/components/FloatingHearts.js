@@ -2,8 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 
 const heartFloat = keyframes`
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(-1000px) rotate(360deg); opacity: 0; }
+  0% { transform: translate(0, 0) rotate(0deg); opacity: var(--heart-opacity, 0.34); }
+  100% { transform: translate(var(--drift-x), calc(-100vh + var(--drift-y))) rotate(var(--drift-rotation)); opacity: 0; }
 `;
 
 const damageRise = keyframes`
@@ -30,13 +30,18 @@ const Heart = styled.button.attrs(props => ({
     scale: 1 + props.$intensity * 0.36,
     translate: `${props.$motionX * props.$intensity * 12}px ${props.$motionY * props.$intensity * 12}px`,
     rotate: `${props.$tilt * props.$intensity * 8}deg`,
-    filter: `drop-shadow(0 0 ${props.$intensity * 12}px ${props.$color}) saturate(${1 + props.$intensity * 0.45})`
+    '--heart-opacity': (props.$boosted ? 0.5 : 0.34) + props.$intensity * 0.12,
+    filter: `drop-shadow(0 0 ${props.$intensity * 4}px ${props.$color}) saturate(${0.58 + props.$intensity * 0.18})`,
+    '--drift-x': `${props.$driftX}px`,
+    '--drift-y': `${props.$driftY}px`,
+    '--drift-rotation': `${props.$driftRotation}deg`
   }
 }))`
   position: fixed;
-  bottom: -100px;
+  top: ${props => props.$top}%;
   left: ${props => props.$left}%;
   z-index: 10;
+  opacity: var(--heart-opacity, 0.34);
   width: ${props => props.$size}px;
   height: ${props => props.$size}px;
   padding: 0;
@@ -131,20 +136,27 @@ const Shard = styled.span`
   --rotation: ${props => props.$rotation}deg;
 `;
 
-const FloatingHearts = ({ count = 15, intensity = 0 }) => {
+const FloatingHearts = ({ count = 15, intensity = 0, boosted = false }) => {
   const [hearts, setHearts] = useState(() => Array.from({ length: count }, (_, id) => {
     const colors = ['#ff69b4', '#ffb6c1', '#ffc0cb', '#ff1493', '#db7093'];
+    const size = Math.random() * 28 + 40;
+    const maxLeft = Math.max(0, 100 - (size / Math.max(1, window.innerWidth)) * 100);
+    const maxTop = Math.max(0, 100 - (size / Math.max(1, window.innerHeight)) * 100);
     return {
       id,
       generation: 0,
-      size: Math.random() * 28 + 40,
+      size,
       color: colors[Math.floor(Math.random() * colors.length)],
-      left: Math.random() * 100,
-      duration: Math.random() * 15 + 15,
+      left: Math.random() * maxLeft,
+      top: Math.random() * maxTop,
+      duration: Math.random() * 10 + 14,
       delay: Math.random() * 10,
       motionX: Math.random() * 2 - 1,
       motionY: Math.random() * 2 - 1,
       tilt: Math.random() * 2 - 1,
+      driftX: Math.random() * 48 - 24,
+      driftY: Math.random() * 48 - 24,
+      driftRotation: Math.random() * 34 - 17,
       damage: 0,
       hits: 0,
       cracks: [],
@@ -213,8 +225,12 @@ const FloatingHearts = ({ count = 15, intensity = 0 }) => {
           ? {
             ...current,
             generation: current.generation + 1,
-            left: Math.random() * 100,
+            left: Math.random() * Math.max(0, 100 - (current.size / Math.max(1, window.innerWidth)) * 100),
+            top: Math.random() * Math.max(0, 100 - (current.size / Math.max(1, window.innerHeight)) * 100),
             delay: 0,
+            driftX: Math.random() * 48 - 24,
+            driftY: Math.random() * 48 - 24,
+            driftRotation: Math.random() * 34 - 17,
             damage: 0,
             hits: 0,
             cracks: [],
@@ -235,12 +251,17 @@ const FloatingHearts = ({ count = 15, intensity = 0 }) => {
       $size={heart.size}
       $color={heart.color}
       $left={heart.left}
+      $top={heart.top}
       $duration={heart.duration}
       $delay={heart.delay}
       $motionX={heart.motionX}
       $motionY={heart.motionY}
       $tilt={heart.tilt}
+      $driftX={heart.driftX}
+      $driftY={heart.driftY}
+      $driftRotation={heart.driftRotation}
       $intensity={intensity}
+      $boosted={boosted}
       $breaking={heart.breaking}
     >
       <svg className="heart-shape" viewBox="0 0 32 32" aria-hidden="true">

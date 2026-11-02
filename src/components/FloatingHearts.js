@@ -1,71 +1,363 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 
-const float = keyframes`
-  0% {
-    transform: translateY(0) rotate(0deg);
-    opacity: 1;
-    border-radius: 0;
-  }
-  100% {
-    transform: translateY(-1000px) rotate(720deg);
-    opacity: 0;
-    border-radius: 50%;
-  }
+const heartFloat = keyframes`
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-1000px) rotate(360deg); opacity: 0; }
 `;
 
-const Heart = styled.div`
+const damageRise = keyframes`
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.65); }
+  15% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -68px) scale(1.05); }
+`;
+
+const crackSpread = keyframes`
+  0% { opacity: 0; transform: scale(0.45); }
+  18% { opacity: 1; }
+  100% { opacity: 0.9; transform: scale(1); }
+`;
+
+const shardFall = keyframes`
+  0% { opacity: 1; transform: translate(0, 0) rotate(0deg) scale(1); }
+  100% { opacity: 0; transform: translate(var(--dx), var(--dy)) rotate(var(--rotation)) scale(0.55); }
+`;
+
+const heartPath = 'M16 28C16 28 3 20.5 3 11.5C3 7.5 6 4.5 10 4.5C12.5 4.5 14.5 5.5 16 7.5C17.5 5.5 19.5 4.5 22 4.5C26 4.5 29 7.5 29 11.5C29 20.5 16 28 16 28Z';
+
+const Heart = styled.button.attrs(props => ({
+  style: {
+    scale: 1 + props.$intensity * 0.36,
+    translate: `${props.$motionX * props.$intensity * 12}px ${props.$motionY * props.$intensity * 12}px`,
+    rotate: `${props.$tilt * props.$intensity * 8}deg`,
+    filter: `drop-shadow(0 0 ${props.$intensity * 12}px ${props.$color}) saturate(${1 + props.$intensity * 0.45})`
+  }
+}))`
   position: fixed;
   bottom: -100px;
-  width: ${props => props.size}px;
-  height: ${props => props.size}px;
-  background-color: ${props => props.color};
-  animation: ${float} ${props => props.duration}s linear infinite;
-  left: ${props => props.left}%;
-  animation-delay: ${props => props.delay}s;
+  left: ${props => props.$left}%;
   z-index: 10;
-  
-  &:before,
-  &:after {
-    content: '';
+  width: ${props => props.$size}px;
+  height: ${props => props.$size}px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  touch-action: manipulation;
+  animation: ${heartFloat} ${props => props.$duration}s linear infinite;
+  animation-delay: ${props => props.$delay}s;
+  visibility: ${props => props.$breaking ? 'hidden' : 'visible'};
+  transition: scale 110ms linear, translate 110ms linear, rotate 110ms linear, filter 110ms linear;
+
+  &:focus-visible { outline: 2px solid white; outline-offset: 4px; }
+
+  .heart-shape, .heart-cracks {
     position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
-    background-color: inherit;
-    border-radius: 50%;
+    overflow: visible;
   }
-  
-  &:before {
-    transform: translateX(-50%);
+
+  .heart-shape path {
+    fill: ${props => props.$color};
+    stroke: rgba(255, 255, 255, 0.35);
+    stroke-width: 0.8;
   }
-  
-  &:after {
-    transform: translateY(-50%);
+
+  .heart-cracks {
+    z-index: 2;
+    pointer-events: none;
+    animation: ${crackSpread} 240ms ease-out both;
+  }
+
+  .crack-line {
+    fill: none;
+    stroke: #fff;
+    stroke-width: 0.58;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9));
+  }
+
+  .crack-branch {
+    fill: none;
+    stroke: rgba(255, 255, 255, 0.84);
+    stroke-width: 0.34;
+    stroke-linecap: round;
   }
 `;
 
-const FloatingHearts = ({ count = 15 }) => {
-  const hearts = Array.from({ length: count }).map((_, i) => {
-    const size = Math.random() * 20 + 10;
+const EffectLayer = styled.div`
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  overflow: hidden;
+  pointer-events: none;
+`;
+
+const DamageNumber = styled.div`
+  position: absolute;
+  left: ${props => props.$x}px;
+  top: ${props => props.$y}px;
+  color: ${props => props.$critical ? '#ffd166' : '#f7f3ff'};
+  font-family: 'Roboto', sans-serif;
+  font-size: ${props => props.$critical ? '1.75rem' : '1.12rem'};
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  text-shadow: 0 2px 3px #1a0717, 0 0 10px ${props => props.$critical ? 'rgba(255, 190, 60, 0.95)' : 'rgba(255, 105, 180, 0.8)'};
+  animation: ${damageRise} 980ms cubic-bezier(0.18, 0.75, 0.25, 1) forwards;
+
+  ${props => props.$critical && `
+    font-style: italic;
+    -webkit-text-stroke: 0.4px #a84c00;
+  `}
+`;
+
+const Shard = styled.span`
+  position: absolute;
+  left: ${props => props.$x}px;
+  top: ${props => props.$y}px;
+  width: ${props => props.$size}px;
+  height: ${props => props.$size}px;
+  background: ${props => props.$color};
+  clip-path: polygon(50% 0, 100% 34%, 72% 100%, 12% 78%, 0 28%);
+  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.8));
+  animation: ${shardFall} 1250ms cubic-bezier(0.2, 0.65, 0.35, 1) forwards;
+  animation-delay: ${props => props.$delay}ms;
+  --dx: ${props => props.$dx}px;
+  --dy: ${props => props.$dy}px;
+  --rotation: ${props => props.$rotation}deg;
+`;
+
+const FloatingHearts = ({ count = 15, intensity = 0 }) => {
+  const [hearts, setHearts] = useState(() => Array.from({ length: count }, (_, id) => {
     const colors = ['#ff69b4', '#ffb6c1', '#ffc0cb', '#ff1493', '#db7093'];
-    const color = colors[Math.floor(Math.random() * colors.length)];
-    const left = Math.random() * 100;
-    const duration = Math.random() * 15 + 15;
-    const delay = Math.random() * 10;
-    
-    return (
-      <Heart 
-        key={i}
-        size={size}
-        color={color}
-        left={left}
-        duration={duration}
-        delay={delay}
-      />
-    );
-  });
-  
-  return <>{hearts}</>;
+    return {
+      id,
+      generation: 0,
+      size: Math.random() * 28 + 40,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      left: Math.random() * 100,
+      duration: Math.random() * 15 + 15,
+      delay: Math.random() * 10,
+      motionX: Math.random() * 2 - 1,
+      motionY: Math.random() * 2 - 1,
+      tilt: Math.random() * 2 - 1,
+      damage: 0,
+      hits: 0,
+      cracks: [],
+      breaking: false
+    };
+  }));
+  const [damageNumbers, setDamageNumbers] = useState([]);
+  const [shatteredHearts, setShatteredHearts] = useState([]);
+  const timeoutRefs = useRef([]);
+  const breakingIdsRef = useRef(new Set());
+
+  useEffect(() => () => {
+    timeoutRefs.current.forEach(clearTimeout);
+  }, []);
+
+  const hitHeart = (event, heart) => {
+    if (heart.breaking || breakingIdsRef.current.has(heart.id)) return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const localX = ((event.clientX - bounds.left) / bounds.width) * 32;
+    const localY = ((event.clientY - bounds.top) / bounds.height) * 32;
+    const critical = Math.random() < 0.2;
+    const damage = critical
+      ? Math.floor(Math.random() * 36) + 60
+      : Math.floor(Math.random() * 19) + 12;
+    const hitId = `${heart.id}-${heart.generation}-${Date.now()}-${Math.random()}`;
+    const damageNumber = {
+      id: hitId,
+      x: event.clientX,
+      y: event.clientY,
+      critical,
+      text: `${critical ? '¡CRÍTICO!' : '¡Normal!'} -${damage}`
+    };
+    const breaksHeart = heart.damage + damage >= 100 || heart.hits + 1 >= 5 || (critical && damage >= 86);
+    const crack = {
+      id: hitId,
+      x: localX,
+      y: localY,
+      paths: createCrackPaths(localX, localY, heart.size)
+    };
+
+    setDamageNumbers(previous => [...previous, damageNumber]);
+    timeoutRefs.current.push(setTimeout(() => {
+      setDamageNumbers(previous => previous.filter(number => number.id !== hitId));
+    }, 1000));
+
+    setHearts(previous => previous.map(current => {
+      if (current.id !== heart.id || current.generation !== heart.generation) return current;
+
+      const nextDamage = current.damage + damage;
+      const nextHits = current.hits + 1;
+      if (!breaksHeart) {
+        return { ...current, damage: nextDamage, hits: nextHits, cracks: [...current.cracks, crack] };
+      }
+
+      return { ...current, damage: nextDamage, hits: nextHits, cracks: [...current.cracks, crack], breaking: true };
+    }));
+
+    if (breaksHeart) {
+      breakingIdsRef.current.add(heart.id);
+      setShatteredHearts(previous => [...previous, createShards(heart, bounds)]);
+      const timeout = setTimeout(() => {
+        breakingIdsRef.current.delete(heart.id);
+        setShatteredHearts(previous => previous.filter(shard => shard.heartId !== heart.id));
+        setHearts(previous => previous.map(current => current.id === heart.id
+          ? {
+            ...current,
+            generation: current.generation + 1,
+            left: Math.random() * 100,
+            delay: 0,
+            damage: 0,
+            hits: 0,
+            cracks: [],
+            breaking: false
+          }
+          : current));
+      }, 1500);
+      timeoutRefs.current.push(timeout);
+    }
+  };
+
+  const heartsMarkup = hearts.map((heart, index) => (
+    <Heart
+      key={`${heart.id}-${heart.generation}`}
+      type="button"
+      aria-label={`Golpea el corazón ${index + 1}; daño acumulado ${heart.damage}`}
+      onClick={event => hitHeart(event, heart)}
+      $size={heart.size}
+      $color={heart.color}
+      $left={heart.left}
+      $duration={heart.duration}
+      $delay={heart.delay}
+      $motionX={heart.motionX}
+      $motionY={heart.motionY}
+      $tilt={heart.tilt}
+      $intensity={intensity}
+      $breaking={heart.breaking}
+    >
+      <svg className="heart-shape" viewBox="0 0 32 32" aria-hidden="true">
+        <path d={heartPath} />
+      </svg>
+      {heart.cracks.map(crack => (
+        <svg
+          className="heart-cracks"
+          key={crack.id}
+          viewBox="0 0 32 32"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
+          <defs>
+            <clipPath id={`heart-clip-${heart.id}-${heart.generation}-${crack.id}`}>
+              <path d={heartPath} />
+            </clipPath>
+          </defs>
+          <g clipPath={`url(#heart-clip-${heart.id}-${heart.generation}-${crack.id})`}>
+            {crack.paths.map((path, pathIndex) => (
+              <path
+                className={pathIndex % 3 === 0 ? 'crack-line' : 'crack-branch'}
+                d={path}
+                key={pathIndex}
+              />
+            ))}
+            <circle cx={crack.x} cy={crack.y} r="0.7" fill="#fff" />
+          </g>
+        </svg>
+      ))}
+    </Heart>
+  ));
+
+  const effectMarkup = (
+    <EffectLayer aria-hidden="true">
+      {damageNumbers.map(number => (
+        <DamageNumber
+          key={number.id}
+          $x={number.x}
+          $y={number.y}
+          $critical={number.critical}
+        >
+          {number.text}
+        </DamageNumber>
+      ))}
+      {shatteredHearts.flatMap(shard => shard.pieces.map(piece => (
+        <Shard
+          key={`${shard.heartId}-${piece.id}`}
+          $x={shard.centerX - piece.size / 2}
+          $y={shard.centerY - piece.size / 2}
+          $size={piece.size}
+          $dx={piece.dx}
+          $dy={piece.dy}
+          $rotation={piece.rotation}
+          $delay={piece.delay}
+          $color={shard.color}
+        />
+      )))}
+    </EffectLayer>
+  );
+
+  return (
+    <>
+      {heartsMarkup}
+      {effectMarkup}
+    </>
+  );
 };
+
+function createCrackPaths(startX, startY, size) {
+  const paths = [];
+  const rayCount = 6;
+
+  for (let ray = 0; ray < rayCount; ray += 1) {
+    const angle = (ray / rayCount) * Math.PI * 2 + (Math.random() - 0.5) * 0.35;
+    const length = size * (0.32 + Math.random() * 0.3);
+    const steps = 4;
+    let path = `M ${startX.toFixed(2)} ${startY.toFixed(2)}`;
+
+    for (let step = 1; step <= steps; step += 1) {
+      const distance = (length / steps) * step;
+      const jitter = step === steps ? 0 : (Math.random() - 0.5) * size * 0.12;
+      const x = startX + Math.cos(angle) * distance + Math.cos(angle + Math.PI / 2) * jitter;
+      const y = startY + Math.sin(angle) * distance + Math.sin(angle + Math.PI / 2) * jitter;
+      path += ` L ${x.toFixed(2)} ${y.toFixed(2)}`;
+    }
+    paths.push(path);
+
+    if (ray % 2 === 0) {
+      const branchX = startX + Math.cos(angle) * length * 0.52;
+      const branchY = startY + Math.sin(angle) * length * 0.52;
+      const branchAngle = angle + (Math.random() < 0.5 ? -1 : 1) * (0.7 + Math.random() * 0.55);
+      const branchLength = length * 0.34;
+      paths.push(`M ${branchX.toFixed(2)} ${branchY.toFixed(2)} L ${(branchX + Math.cos(branchAngle) * branchLength).toFixed(2)} ${(branchY + Math.sin(branchAngle) * branchLength).toFixed(2)}`);
+    }
+  }
+
+  return paths;
+}
+
+function createShards(heart, bounds) {
+  const centerX = bounds.left + bounds.width / 2;
+  const centerY = bounds.top + bounds.height / 2;
+  const pieces = Array.from({ length: 10 }, (_, id) => {
+    const angle = (id / 10) * Math.PI * 2 + (Math.random() - 0.5) * 0.55;
+    const force = 35 + Math.random() * 100;
+    return {
+      id,
+      size: Math.max(12, heart.size * (0.25 + Math.random() * 0.24)),
+      dx: Math.cos(angle) * force,
+      dy: 35 + Math.random() * 100 + Math.sin(angle) * force * 0.45,
+      rotation: Math.random() * 420 - 210,
+      delay: Math.random() * 90
+    };
+  });
+
+  return { heartId: heart.id, centerX, centerY, color: heart.color, pieces };
+}
 
 export default FloatingHearts;

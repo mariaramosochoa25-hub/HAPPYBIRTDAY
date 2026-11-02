@@ -54,16 +54,16 @@ const Star = styled.div`
   border-radius: 50%;
   opacity: ${props => props.$opacity};
   box-shadow: ${props => props.$brilliant
-    ? '0 0 7px 2px rgba(255,255,255,0.9), 0 0 20px rgba(255,190,230,0.8)'
-    : '0 0 3px rgba(255,255,255,0.65)'};
+    ? '0 0 6px 2px rgba(255,255,255,0.85)'
+    : 'none'};
+  will-change: opacity, transform;
   animation: twinkle ${props => props.$duration}s ease-in-out infinite;
 
   @keyframes twinkle {
-    0%, 100% { opacity: ${props => props.$opacity}; transform: scale(1); filter: brightness(1); }
+    0%, 100% { opacity: ${props => props.$opacity}; transform: scale(1); }
     50% {
       opacity: ${props => props.$brilliant ? 1 : props.$opacity * 0.55};
       transform: scale(${props => props.$brilliant ? 1.7 : 1.15});
-      filter: brightness(${props => props.$brilliant ? 2 : 1.25});
     }
   }
 `;
@@ -72,7 +72,6 @@ const DecorationCircle = styled(motion.div)`
   position: absolute;
   border-radius: 50%;
   background: radial-gradient(circle, rgba(255, 105, 180, 0.24), transparent 70%);
-  filter: blur(8px);
   z-index: 0;
   pointer-events: none;
 `;
@@ -553,7 +552,10 @@ function App() {
       hairMaterial?.pbrMetallicRoughness.setMetallicFactor(0);
     };
 
-    const handleMikuLoad = () => correctMikuMaterials(0);
+    const handleMikuLoad = () => {
+      if (window.innerWidth < 700) viewer.renderScale = 0.75;
+      correctMikuMaterials(0);
+    };
     viewer.addEventListener('load', handleMikuLoad);
     correctMikuMaterials();
     return () => {
@@ -691,7 +693,7 @@ function App() {
     intensityRef.current = intensity;
 
     const updateInterval = window.innerWidth < 700 ? 80 : 40;
-    if (now - lastIntensityUpdateRef.current > updateInterval) {
+    if (window.innerWidth >= 700 && now - lastIntensityUpdateRef.current > updateInterval) {
       setAudioIntensity(previous => (Math.abs(previous - intensity) > 0.02 || intensity === 0 ? intensity : previous));
       lastIntensityUpdateRef.current = now;
     }
@@ -754,7 +756,7 @@ function App() {
     audioContextRef.current?.close();
   }, []);
 
-  const stars = useMemo(() => Array.from({ length: 96 }, (_, index) => {
+  const stars = useMemo(() => Array.from({ length: window.innerWidth < 700 ? 34 : 96 }, (_, index) => {
     const brilliant = Math.random() < 0.16;
     const size = brilliant ? Math.random() * 2 + 2.2 : Math.random() * 1.8 + 1;
     const opacity = brilliant ? Math.random() * 0.12 + 0.88 : Math.random() * 0.38 + 0.48;
@@ -841,7 +843,7 @@ function App() {
         />
       ))}
 
-      <FloatingHearts count={window.innerWidth < 700 ? 12 : 36} intensity={audioIntensity} boosted={heartsBoosted} />
+      <FloatingHearts count={window.innerWidth < 700 ? 10 : 36} intensity={window.innerWidth < 700 ? 0 : audioIntensity} boosted={heartsBoosted} />
 
       {memeFlash && (
         <MemeFlash
@@ -873,7 +875,7 @@ function App() {
                 alt="Hatsune Miku bailando"
                 autoplay={danceStarted}
                 animation-name={danceStarted ? 'Miku|Miku_Dance' : ''}
-                shadow-intensity="1"
+                shadow-intensity={window.innerWidth < 700 ? '0' : '1'}
                 environment-image="neutral"
                 exposure="1"
                 style={{ width: '100%', height: '100%' }}

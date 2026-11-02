@@ -31,7 +31,7 @@ const Heart = styled.button.attrs(props => ({
     translate: `${props.$motionX * props.$intensity * 12}px ${props.$motionY * props.$intensity * 12}px`,
     rotate: `${props.$tilt * props.$intensity * 8}deg`,
     '--heart-opacity': (props.$boosted ? 0.5 : 0.34) + props.$intensity * 0.12,
-    filter: `drop-shadow(0 0 ${props.$intensity * 4}px ${props.$color}) saturate(${0.58 + props.$intensity * 0.18})`,
+    filter: props.$intensity > 0.02 ? `drop-shadow(0 0 ${props.$intensity * 4}px ${props.$color}) saturate(${0.58 + props.$intensity * 0.18})` : 'saturate(0.58)',
     '--drift-x': `${props.$driftX}px`,
     '--drift-y': `${props.$driftY}px`,
     '--drift-rotation': `${props.$driftRotation}deg`

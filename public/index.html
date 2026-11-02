@@ -13,7 +13,10 @@
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     <title>Happy Women's Day</title>
     <!-- Add model-viewer script -->
-    <script type="module" src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"></script>
+    <link rel="preconnect" href="https://unpkg.com" crossorigin>
+    <link rel="preload" as="fetch" href="/miku_birthday.glb" crossorigin="anonymous">
+    <link rel="prefetch" as="fetch" href="/neco_arc_remake.glb" crossorigin="anonymous">
+    <script type="module" src="https://unpkg.com/@google/model-viewer@4.4.0/dist/model-viewer.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Bubblegum+Sans&family=Indie+Flower&display=swap" rel="stylesheet">
   </head>
   <body>

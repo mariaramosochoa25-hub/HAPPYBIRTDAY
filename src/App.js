@@ -690,8 +690,9 @@ function App() {
     const intensity = Math.max(steadyIntensity, beatPulseRef.current);
     intensityRef.current = intensity;
 
-    if (now - lastIntensityUpdateRef.current > 32) {
-      setAudioIntensity(intensity);
+    const updateInterval = window.innerWidth < 700 ? 80 : 40;
+    if (now - lastIntensityUpdateRef.current > updateInterval) {
+      setAudioIntensity(previous => (Math.abs(previous - intensity) > 0.02 || intensity === 0 ? intensity : previous));
       lastIntensityUpdateRef.current = now;
     }
 
@@ -840,7 +841,7 @@ function App() {
         />
       ))}
 
-      <FloatingHearts count={36} intensity={audioIntensity} boosted={heartsBoosted} />
+      <FloatingHearts count={window.innerWidth < 700 ? 12 : 36} intensity={audioIntensity} boosted={heartsBoosted} />
 
       {memeFlash && (
         <MemeFlash

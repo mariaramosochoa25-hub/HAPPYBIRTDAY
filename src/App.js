@@ -399,14 +399,13 @@ const TossableNeco = ({ neco, stageRef }) => {
 
   return (
     <FallingNeco
-      aria-label="Neco Arc: arrastra para girar; mantén pulsado o usa clic derecho para lanzarlo"
-      title="Arrastra para girar; mantén pulsado en touch o usa clic derecho para lanzarlo"
+      aria-label="Neco Arc: arrástralo con el cursor para moverlo"
+      title="Arrástralo para moverlo a cualquier lugar"
       initial={{ x: neco.startX, y: neco.startY, scale: 0.28, rotate: neco.startRotation, opacity: 0 }}
       animate={{ x: neco.endX, y: neco.endY, scale: 1, rotate: neco.endRotation, opacity: 1 }}
       transition={{ duration: neco.duration, delay: neco.delay, ease: [0.2, 0.65, 0.35, 1] }}
       exit={{ x: neco.startX, y: neco.startY, scale: 0.28, opacity: 0, transition: { duration: 0.7, delay: 0, ease: [0.5, 0, 0.75, 0.4] } }}
       drag
-      dragListener={false}
       dragControls={dragControls}
       dragConstraints={stageRef}
       dragElastic={0.72}
@@ -424,8 +423,7 @@ const TossableNeco = ({ neco, stageRef }) => {
         <model-viewer
           src="/neco_arc_remake.glb"
           alt="Neco Arc flotando; arrastra para girar y ver su rostro"
-          camera-controls
-          disable-pan
+          style={{ pointerEvents: 'none' }}
           camera-orbit="0deg 80deg 4m"
           field-of-view="35deg"
           shadow-intensity="1"
@@ -499,7 +497,7 @@ function App() {
   const stageRef = useRef(null);
   const giftRef = useRef(null);
   const mikuViewerRef = useRef(null);
-  const [mikuScale, setMikuScale] = useState(1.3);
+  const [mikuScale, setMikuScale] = useState(1.9);
   const [hasStarted, setHasStarted] = useState(false);
   const [danceStarted, setDanceStarted] = useState(false);
   const [heartsBoosted, setHeartsBoosted] = useState(false);
@@ -887,7 +885,7 @@ function App() {
             <input
               type="range"
               min="0.75"
-              max="1.35"
+              max="2.4"
               step="0.05"
               value={mikuScale}
               aria-label="Tamaño de Miku"

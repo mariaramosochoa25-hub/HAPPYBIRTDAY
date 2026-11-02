@@ -1,8 +1,8 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 
 const heartFloat = keyframes`
-  0% { transform: translate(0, 0) rotate(0deg); opacity: var(--heart-opacity, 0.34); }
+  0% { transform: translate(0, 0) rotate(0deg); opacity: calc(var(--base-opacity, 0.34) + var(--hi, 0) * 0.12); }
   100% { transform: translate(var(--drift-x), calc(-100vh + var(--drift-y))) rotate(var(--drift-rotation)); opacity: 0; }
 `;
 
@@ -27,11 +27,10 @@ const heartPath = 'M16 28C16 28 3 20.5 3 11.5C3 7.5 6 4.5 10 4.5C12.5 4.5 14.5 5
 
 const Heart = styled.button.attrs(props => ({
   style: {
-    scale: 1 + props.$intensity * 0.36,
-    translate: `${props.$motionX * props.$intensity * 12}px ${props.$motionY * props.$intensity * 12}px`,
-    rotate: `${props.$tilt * props.$intensity * 8}deg`,
-    '--heart-opacity': (props.$boosted ? 0.5 : 0.34) + props.$intensity * 0.12,
-    filter: props.$intensity > 0.02 ? `drop-shadow(0 0 ${props.$intensity * 4}px ${props.$color}) saturate(${0.58 + props.$intensity * 0.18})` : 'saturate(0.58)',
+    '--mx': props.$motionX,
+    '--my': props.$motionY,
+    '--tilt': props.$tilt,
+    '--base-opacity': props.$boosted ? 0.5 : 0.34,
     '--drift-x': `${props.$driftX}px`,
     '--drift-y': `${props.$driftY}px`,
     '--drift-rotation': `${props.$driftRotation}deg`
@@ -41,7 +40,12 @@ const Heart = styled.button.attrs(props => ({
   top: ${props => props.$top}%;
   left: ${props => props.$left}%;
   z-index: 10;
-  opacity: var(--heart-opacity, 0.34);
+  opacity: calc(var(--base-opacity, 0.34) + var(--hi, 0) * 0.12);
+  scale: calc(1 + var(--hi, 0) * 0.36);
+  translate: calc(var(--mx) * var(--hi, 0) * 12px) calc(var(--my) * var(--hi, 0) * 12px);
+  rotate: calc(var(--tilt) * var(--hi, 0) * 8deg);
+  will-change: transform, opacity;
+  contain: layout style;
   width: ${props => props.$size}px;
   height: ${props => props.$size}px;
   padding: 0;
@@ -52,7 +56,6 @@ const Heart = styled.button.attrs(props => ({
   animation: ${heartFloat} ${props => props.$duration}s linear infinite;
   animation-delay: ${props => props.$delay}s;
   visibility: ${props => props.$breaking ? 'hidden' : 'visible'};
-  transition: scale 110ms linear, translate 110ms linear, rotate 110ms linear, filter 110ms linear;
 
   &:focus-visible { outline: 2px solid white; outline-offset: 4px; }
 
@@ -82,7 +85,6 @@ const Heart = styled.button.attrs(props => ({
     stroke-width: 0.58;
     stroke-linecap: round;
     stroke-linejoin: round;
-    filter: drop-shadow(0 0 1px rgba(255, 255, 255, 0.9));
   }
 
   .crack-branch {
@@ -128,7 +130,7 @@ const Shard = styled.span`
   height: ${props => props.$size}px;
   background: ${props => props.$color};
   clip-path: polygon(50% 0, 100% 34%, 72% 100%, 12% 78%, 0 28%);
-  filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.8));
+  will-change: transform, opacity;
   animation: ${shardFall} 1250ms cubic-bezier(0.2, 0.65, 0.35, 1) forwards;
   animation-delay: ${props => props.$delay}ms;
   --dx: ${props => props.$dx}px;
@@ -136,7 +138,62 @@ const Shard = styled.span`
   --rotation: ${props => props.$rotation}deg;
 `;
 
-const FloatingHearts = ({ count = 15, intensity = 0, boosted = false }) => {
+const HeartItem = React.memo(({ heart, index, boosted, onHit }) => (
+    <Heart
+    key={`${heart.id}-${heart.generation}`}
+    type="button"
+    aria-label={`Golpea el corazón ${index + 1}; daño acumulado ${heart.damage}`}
+    onClick={event => onHit(event, heart)}
+    $size={heart.size}
+    $color={heart.color}
+    $left={heart.left}
+    $top={heart.top}
+    $duration={heart.duration}
+    $delay={heart.delay}
+    $motionX={heart.motionX}
+    $motionY={heart.motionY}
+    $tilt={heart.tilt}
+    $driftX={heart.driftX}
+    $driftY={heart.driftY}
+    $driftRotation={heart.driftRotation}
+    $boosted={boosted}
+    $breaking={heart.breaking}
+  >
+    <svg className="heart-shape" viewBox="0 0 32 32" aria-hidden="true">
+      <path d={heartPath} />
+    </svg>
+    {heart.cracks.length > 0 && (
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <defs>
+          <clipPath id="heart-clip"><path d={heartPath} /></clipPath>
+        </defs>
+      </svg>
+    )}
+    {heart.cracks.map(crack => (
+      <svg
+        className="heart-cracks"
+        key={crack.id}
+        viewBox="0 0 32 32"
+        preserveAspectRatio="none"
+        aria-hidden="true"
+      >
+        <g clipPath="url(#heart-clip)">
+          {crack.paths.map((path, pathIndex) => (
+            <path
+              className={pathIndex % 3 === 0 ? 'crack-line' : 'crack-branch'}
+              d={path}
+              key={pathIndex}
+            />
+          ))}
+          <circle cx={crack.x} cy={crack.y} r="0.7" fill="#fff" />
+        </g>
+      </svg>
+    ))}
+  </Heart>
+));
+
+const FloatingHearts = ({ count = 15, intensityRef = null, boosted = false }) => {
+  const wrapperRef = useRef(null);
   const [hearts, setHearts] = useState(() => Array.from({ length: count }, (_, id) => {
     const colors = ['#ff69b4', '#ffb6c1', '#ffc0cb', '#ff1493', '#db7093'];
     const size = Math.random() * 28 + 40;
@@ -171,6 +228,22 @@ const FloatingHearts = ({ count = 15, intensity = 0, boosted = false }) => {
   useEffect(() => () => {
     timeoutRefs.current.forEach(clearTimeout);
   }, []);
+
+  useEffect(() => {
+    if (!intensityRef) return undefined;
+    let frame;
+    let last = 0;
+    const tick = () => {
+      const next = intensityRef.current || 0;
+      if (Math.abs(next - last) > 0.015 || (next === 0 && last !== 0)) {
+        last = next;
+        wrapperRef.current?.style.setProperty('--hi', next.toFixed(3));
+      }
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [intensityRef]);
 
   const hitHeart = (event, heart) => {
     if (heart.breaking || breakingIdsRef.current.has(heart.id)) return;
@@ -242,57 +315,18 @@ const FloatingHearts = ({ count = 15, intensity = 0, boosted = false }) => {
     }
   };
 
+  const hitRef = useRef(hitHeart);
+  hitRef.current = hitHeart;
+  const onHit = useCallback((event, heart) => hitRef.current(event, heart), []);
+
   const heartsMarkup = hearts.map((heart, index) => (
-    <Heart
+    <HeartItem
       key={`${heart.id}-${heart.generation}`}
-      type="button"
-      aria-label={`Golpea el corazón ${index + 1}; daño acumulado ${heart.damage}`}
-      onClick={event => hitHeart(event, heart)}
-      $size={heart.size}
-      $color={heart.color}
-      $left={heart.left}
-      $top={heart.top}
-      $duration={heart.duration}
-      $delay={heart.delay}
-      $motionX={heart.motionX}
-      $motionY={heart.motionY}
-      $tilt={heart.tilt}
-      $driftX={heart.driftX}
-      $driftY={heart.driftY}
-      $driftRotation={heart.driftRotation}
-      $intensity={intensity}
-      $boosted={boosted}
-      $breaking={heart.breaking}
-    >
-      <svg className="heart-shape" viewBox="0 0 32 32" aria-hidden="true">
-        <path d={heartPath} />
-      </svg>
-      {heart.cracks.map(crack => (
-        <svg
-          className="heart-cracks"
-          key={crack.id}
-          viewBox="0 0 32 32"
-          preserveAspectRatio="none"
-          aria-hidden="true"
-        >
-          <defs>
-            <clipPath id={`heart-clip-${heart.id}-${heart.generation}-${crack.id}`}>
-              <path d={heartPath} />
-            </clipPath>
-          </defs>
-          <g clipPath={`url(#heart-clip-${heart.id}-${heart.generation}-${crack.id})`}>
-            {crack.paths.map((path, pathIndex) => (
-              <path
-                className={pathIndex % 3 === 0 ? 'crack-line' : 'crack-branch'}
-                d={path}
-                key={pathIndex}
-              />
-            ))}
-            <circle cx={crack.x} cy={crack.y} r="0.7" fill="#fff" />
-          </g>
-        </svg>
-      ))}
-    </Heart>
+      heart={heart}
+      index={index}
+      boosted={boosted}
+      onHit={onHit}
+    />
   ));
 
   const effectMarkup = (
@@ -324,10 +358,10 @@ const FloatingHearts = ({ count = 15, intensity = 0, boosted = false }) => {
   );
 
   return (
-    <>
+    <div ref={wrapperRef} style={{ display: 'contents' }}>
       {heartsMarkup}
       {effectMarkup}
-    </>
+    </div>
   );
 };
 
@@ -365,8 +399,8 @@ function createCrackPaths(startX, startY, size) {
 function createShards(heart, bounds) {
   const centerX = bounds.left + bounds.width / 2;
   const centerY = bounds.top + bounds.height / 2;
-  const pieces = Array.from({ length: 10 }, (_, id) => {
-    const angle = (id / 10) * Math.PI * 2 + (Math.random() - 0.5) * 0.55;
+  const pieces = Array.from({ length: 7 }, (_, id) => {
+    const angle = (id / 7) * Math.PI * 2 + (Math.random() - 0.5) * 0.55;
     const force = 35 + Math.random() * 100;
     return {
       id,

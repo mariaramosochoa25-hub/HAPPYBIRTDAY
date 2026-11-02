@@ -519,13 +519,11 @@ function App() {
   const previousBassSpectrumRef = useRef(null);
   const lastBeatTimeRef = useRef(0);
   const frequencyDataRef = useRef(null);
-  const lastIntensityUpdateRef = useRef(0);
   const memeTimeoutRef = useRef(null);
   const memeLockRef = useRef(false);
   const lastMemeIndexRef = useRef(-1);
   const [, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
-  const [audioIntensity, setAudioIntensity] = useState(0);
   const [memeFlash, setMemeFlash] = useState(null);
 
   useEffect(() => {
@@ -692,11 +690,6 @@ function App() {
     const intensity = Math.max(steadyIntensity, beatPulseRef.current);
     intensityRef.current = intensity;
 
-    const updateInterval = window.innerWidth < 700 ? 80 : 40;
-    if (window.innerWidth >= 700 && now - lastIntensityUpdateRef.current > updateInterval) {
-      setAudioIntensity(previous => (Math.abs(previous - intensity) > 0.02 || intensity === 0 ? intensity : previous));
-      lastIntensityUpdateRef.current = now;
-    }
 
     animationFrameRef.current = requestAnimationFrame(analyzeAudio);
   };
@@ -708,7 +701,6 @@ function App() {
     if (!audio.paused) {
       audio.pause();
       setIsPlaying(false);
-      setAudioIntensity(0);
       intensityRef.current = 0;
       cancelAnimationFrame(animationFrameRef.current);
       return;
@@ -794,7 +786,6 @@ function App() {
         }}
         onEnded={() => {
           setIsPlaying(false);
-          setAudioIntensity(0);
           intensityRef.current = 0;
           beatPulseRef.current = 0;
           cancelAnimationFrame(animationFrameRef.current);
@@ -830,7 +821,7 @@ function App() {
         </AudioButton>
       )}
 
-      {hasStarted && <PlayStage ref={stageRef} aria-label="Escenario de cumpleaños">
+      {hasStarted && !showBirthdayEnding && <PlayStage ref={stageRef} aria-label="Escenario de cumpleaños">
       <StarContainer>{stars}</StarContainer>
 
       {circles.map(circle => (
@@ -843,7 +834,7 @@ function App() {
         />
       ))}
 
-      <FloatingHearts count={window.innerWidth < 700 ? 10 : 36} intensity={window.innerWidth < 700 ? 0 : audioIntensity} boosted={heartsBoosted} />
+      {!showBirthdayEnding && <FloatingHearts count={window.innerWidth < 700 ? 10 : 36} intensityRef={window.innerWidth < 700 ? null : intensityRef} boosted={heartsBoosted} />}
 
       {memeFlash && (
         <MemeFlash
@@ -927,7 +918,7 @@ function App() {
       </LiveRegion>
       </PlayStage>}
 
-      {hasStarted && <MessageCard marginBottom={true} />}
+      {hasStarted && !showBirthdayEnding && <MessageCard marginBottom={true} />}
 
       {showBirthdayEnding && (
         <BirthdayEnding
